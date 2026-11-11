@@ -3,6 +3,8 @@
 namespace App\Entity;
 
 use App\Repository\UserRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Security\Core\User\UserInterface;
 
@@ -34,6 +36,11 @@ class User implements UserInterface
     #[ORM\Column]
     private ?\DateTimeImmutable $createdAt = null;
 
+    /**
+     * @var Collection<int, UserLolAccount>
+     */
+    #[ORM\OneToMany(mappedBy: 'user', targetEntity: UserLolAccount::class, cascade: ['remove'], orphanRemoval: true)]
+    private Collection $lolAccounts;
 
     public function __construct()
     {
@@ -41,8 +48,8 @@ class User implements UserInterface
             'now',
             new \DateTimeZone('UTC')
         );
+        $this->lolAccounts = new ArrayCollection();
     }
-
 
     public function getId(): ?int
     {
@@ -131,6 +138,35 @@ class User implements UserInterface
     public function setCreatedAt(\DateTimeImmutable $createdAt): static
     {
         $this->createdAt = $createdAt;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, UserLolAccount>
+     */
+    public function getLolAccounts(): Collection
+    {
+        return $this->lolAccounts;
+    }
+
+    public function addLolAccount(UserLolAccount $lolAccount): static
+    {
+        if (!$this->lolAccounts->contains($lolAccount)) {
+            $this->lolAccounts->add($lolAccount);
+            $lolAccount->setUser($this);
+        }
+
+        return $this;
+    }
+
+    public function removeLolAccount(UserLolAccount $lolAccount): static
+    {
+        if ($this->lolAccounts->removeElement($lolAccount)) {
+            if ($lolAccount->getUser() === $this) {
+                $lolAccount->setUser(null);
+            }
+        }
 
         return $this;
     }
