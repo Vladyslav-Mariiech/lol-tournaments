@@ -143,4 +143,53 @@ class TournamentController extends AbstractController
             'verifiedData' => $riotData,
         ], Response::HTTP_CREATED);
     }
+
+    #[Route('/{id}/registrations', name: 'app_admin_tournament_registrations', methods: ['GET'])]
+    public function getRegistrations(
+        int $id,
+        TournamentRepository $tournamentRepository,
+        TournamentRegistrationRepository $registrationRepository
+    ): JsonResponse {
+        $tournament = $tournamentRepository->find($id);
+
+        if (!$tournament) {
+            return $this->json(['error' => 'Турнир не найден'], Response::HTTP_NOT_FOUND);
+        }
+
+        $registrations = $registrationRepository->findBy(
+            ['tournament' => $tournament],
+            ['registeredAt' => 'ASC']
+        );
+
+        $data = array_map(static function (TournamentRegistration $reg) {
+            $user = $reg->getUser();
+            return [
+                'id' => $reg->getId(),
+                'user' => [
+                    'id' => $user->getId(),
+                    'username' => $user->getUsername(),
+                    'avatar' => $user->getAvatar(),
+                    'discordId' => $user->getDiscordId(),
+                ],
+                'lolRank' => $reg->getLolRank(),
+                'isCaptainWilling' => $reg->isCaptainWilling(),
+                'links' => [
+                    'opgg' => $reg->getOpggUrl(),
+                    'leagueOfGraphs' => $reg->getLeagueofgraphsUrl(),
+                    'dpm' => $reg->getDpmUrl(),
+                ],
+                'registeredAt' => $reg->getRegisteredAt()?->format(\DateTimeInterface::ATOM),
+            ];
+        }, $registrations);
+
+        return $this->json([
+            'tournament' => [
+                'id' => $tournament->getId(),
+                'name' => $tournament->getName(),
+                'maxTeams' => $tournament->getMaxTeams(),
+            ],
+            'totalRegistrations' => count($data),
+            'registrations' => $data,
+        ]);
+    }
 }
