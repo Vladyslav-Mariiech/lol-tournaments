@@ -1,0 +1,31 @@
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-width: 320px;
+  background: #0b1020;
+  font-family: Arial, sans-serif;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+button {
+  font: inherit;
+}
