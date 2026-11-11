@@ -8,14 +8,17 @@ use App\Entity\User;
 use App\Repository\TournamentRepository;
 use App\Repository\TournamentRegistrationRepository;
 use App\Service\RiotApiService;
+use App\Service\TournamentRegistrationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 #[Route('/api/tournaments')]
 class TournamentController extends AbstractController
@@ -78,70 +81,27 @@ class TournamentController extends AbstractController
     public function register(
         int $id,
         Request $request,
-        TournamentRepository $tournamentRepository,
-        TournamentRegistrationRepository $registrationRepository,
-        RiotApiService $riotApiService,
-        EntityManagerInterface $em,
+        TournamentRegistrationService $registrationService,
         #[CurrentUser] ?User $user
     ): JsonResponse {
         if (!$user) {
             return $this->json(['error' => 'Необходимо авторизоваться'], Response::HTTP_UNAUTHORIZED);
         }
 
-        $tournament = $tournamentRepository->find($id);
-        if (!$tournament) {
-            return $this->json(['error' => 'Турнир не найден'], Response::HTTP_NOT_FOUND);
-        }
-
-        if ($tournament->getStatus() !== 'registration') {
-            return $this->json(['error' => 'Регистрация на этот турнир закрыта'], Response::HTTP_BAD_REQUEST);
-        }
-
-        // Проверка повторной регистрации
-        $existing = $registrationRepository->findOneBy([
-            'tournament' => $tournament,
-            'user' => $user,
-        ]);
-
-        if ($existing) {
-            return $this->json(['error' => 'Вы уже зарегистрированы на этот турнир'], Response::HTTP_BAD_REQUEST);
-        }
-
         $payload = json_decode($request->getContent(), true) ?? [];
-        $riotId = trim($payload['riotId'] ?? '');
-        $region = trim($payload['region'] ?? 'euw1'); // По умолчанию EUW
 
+        try {
+            $registration = $registrationService->registerUser($user, $id, $payload);
 
-        if (empty($riotId)) {
-            return $this->json(['error' => 'Укажите ваш Riot ID (например, Name#TAG)'], Response::HTTP_BAD_REQUEST);
-        }
-
-        // Запрос к Riot API для проверки игрока и получения ранга
-        $riotData = $riotApiService->getPlayerData($riotId, $region);
-        $riotData = $riotApiService->getPlayerData($riotId, $region);
-        if (!$riotData) {
-            $regionName = strtoupper(str_replace('1', '', $region));
             return $this->json([
-                'error' => sprintf('Игрок с таким Riot ID не найден на сервере %s', $regionName)
-            ], Response::HTTP_BAD_REQUEST);
+                'message' => 'Заявка успешно принята!',
+                'lolRank' => $registration->getLolRank(),
+            ], Response::HTTP_CREATED);
+        } catch (NotFoundHttpException $e) {
+            return $this->json(['error' => $e->getMessage()], Response::HTTP_NOT_FOUND);
+        } catch (BadRequestHttpException $e) {
+            return $this->json(['error' => $e->getMessage()], Response::HTTP_BAD_REQUEST);
         }
-
-        $registration = new TournamentRegistration();
-        $registration->setTournament($tournament);
-        $registration->setUser($user);
-        $registration->setLolRank($riotData['rankDisplay']);
-        $registration->setOpggUrl($riotData['externalLinks']['opgg']);
-        $registration->setLeagueofgraphsUrl($riotData['externalLinks']['leagueOfGraphs']);
-        $registration->setDpmUrl($riotData['externalLinks']['dpm']);
-        $registration->setIsCaptainWilling((bool)($payload['isCaptainWilling'] ?? false));
-
-        $em->persist($registration);
-        $em->flush();
-
-        return $this->json([
-            'message' => 'Заявка успешно принята!',
-            'verifiedData' => $riotData,
-        ], Response::HTTP_CREATED);
     }
 
     #[Route('/{id}/registrations', name: 'app_admin_tournament_registrations', methods: ['GET'])]
